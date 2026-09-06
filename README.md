@@ -1,21 +1,35 @@
-echo $env:JAVA_HOME# MM Pantry
+# MM Pantry
 
-**Made with love from your pantry.**
+MM Pantry is an Android app I built for my Mobile App Development assignment. The idea is simple: you tell it what's in your pantry, and it tells you what you can actually cook with it — nothing more, nothing less. If a recipe needs 5 ingredients and you only have 4, it won't show up. That's the whole point of the app, really.
 
-MM Pantry is a Java Android application that helps users reduce food waste by suggesting recipes only when every required ingredient is available in the pantry in the required quantity. Its design combines a chic Spanish-and-Italian summer mood with a clean, feed-inspired layout.
+It's built in Java using Android Studio, and everything runs locally on the device with SQLite — no internet connection needed, no login, nothing to set up.
 
-## Technology
+## What it does
 
-The project uses Java, Android Studio, XML-compatible Android views created in Java, AndroidX AppCompat, Material Components, RecyclerView, SQLiteOpenHelper, Activities, Intents, and SharedPreferences for theme preference persistence. It does not require an internet connection or a recipe API.
+You can add ingredients to your pantry (name, quantity, unit, and an optional expiry date if you want to track that), edit them, or delete them once they're used up. There's a Suggested Recipes screen that checks your pantry against a list of 15 recipes and only shows you the ones you can make right now. Tap into any recipe to see the full ingredient list and method. There's also a basic settings screen with a dark mode toggle, and a bottom nav bar to move between the three main screens.
 
-## Setup
+## Why SQLite
 
-Open the `MMPantry` folder in Android Studio, allow Gradle to synchronise, and run the app on an Android emulator or physical device. The app seeds its recipe collection the first time the database is created.
+I went with SQLite over Firebase or PostgreSQL mainly because this app doesn't need to talk to a server for anything — it's just you and your own pantry, so there's no real reason to add a network dependency. SQLiteOpenHelper is also what we covered in the persistent data section of the module, and it meant I could keep everything self-contained and not have to worry about setting up and paying for hosting somewhere.
 
-## Assessment evidence checklist
+## Getting it running
 
-Demonstrate adding, viewing, editing, and deleting a pantry item; persistence after closing and reopening; strict matching by adding/removing an ingredient; light/dark mode; recipe detail navigation; validation feedback; and the database/matching code during the video.
+Clone the repo:
 
-## Suggested incremental commit history
+git clone https://github.com/Bmiriam1/MMPantry.git
 
-Use genuine commits during development, for example: scaffold project, add theme resources, add database helper, seed recipes, implement pantry CRUD, add RecyclerView adapter, add strict matching, add recipe detail, add settings theme switch, test empty states, polish UI, and update documentation. Do not manufacture history after the fact.
+
+Open the `MMPantry` folder in Android Studio and let Gradle sync. Once that's done you can just hit Run, or if you want to build from the command line:
+
+.\gradlew.bat assembleDebug
+adb install app\build\outputs\apk\debug\app-debug.apk
+
+
+First time you launch the app it'll seed the database with the recipe list automatically, so you don't need to add anything manually to see it working.
+
+## A quick tour of the code
+
+- `DatabaseHelper.java` — this is where most of the actual logic lives, including the strict-matching function that decides what counts as "suggested"
+- `PantryActivity`, `RecipesActivity`, `RecipeDetailActivity`, `AddEditIngredientActivity`, `SettingsActivity` — the five screens
+- `PantryAdapter` / `RecipeAdapter` — the RecyclerView adapters for the two list screens
+- `NavBar.java` — small helper class for the bottom nav bar, shared across the three main screens so I wasn't repeating the same code three times
