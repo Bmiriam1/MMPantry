@@ -1,0 +1,7 @@
+<resources>
+<style name="Theme.MMPantry" parent="Theme.Material3.DayNight.NoActionBar">
+    <item name="android:fontFamily">sans</item><item name="android:colorAccent">@color/muted_gold</item>
+    <item name="android:navigationBarColor">@color/charcoal</item><item name="android:statusBarColor">@color/charcoal</item>
+    <item name="android:windowLightStatusBar">false</item>
+</style>
+</resources>

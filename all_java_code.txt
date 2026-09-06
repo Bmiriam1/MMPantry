@@ -1,0 +1,131 @@
+﻿===== C:\Users\user\Downloads\MMPantry_AndroidProject\MMPantry\app\src\main\java\com\mmpantry\app\AddEditIngredientActivity.java =====
+package com.mmpantry.app;
+import android.app.*;import android.os.*;import android.graphics.Color;import android.view.*;import android.widget.*;
+public class AddEditIngredientActivity extends Activity{DatabaseHelper db;EditText name,qty,unit,expiry;int id=-1;public void onCreate(Bundle b){super.onCreate(b);db=new DatabaseHelper(this);id=getIntent().getIntExtra("id",-1);LinearLayout l=new LinearLayout(this);l.setOrientation(LinearLayout.VERTICAL);l.setPadding(36,30,36,20);l.setBackgroundColor(Color.rgb(245,240,232));TextView h=new TextView(this);h.setText(id<0?"Add ingredient":"Edit ingredient");h.setTextSize(28);l.addView(h);name=f("Ingredient name");qty=f("Quantity");unit=f("Unit (pieces, grams, ml)");expiry=f("Expiry date (optional)");l.addView(name);l.addView(qty);l.addView(unit);l.addView(expiry);if(id>=0){Ingredient x=db.getIngredient(id);name.setText(x.name);qty.setText(""+x.quantity);unit.setText(x.unit);expiry.setText(x.expiry);}Button save=new Button(this);save.setText("SAVE TO PANTRY");save.setOnClickListener(v->save());l.addView(save);setContentView(l);}EditText f(String h){EditText e=new EditText(this);e.setHint(h);e.setPadding(0,20,0,20);return e;}void save(){String n=name.getText().toString().trim(),u=unit.getText().toString().trim(),q=qty.getText().toString().trim();if(n.isEmpty()||u.isEmpty()||q.isEmpty()){Toast.makeText(this,"Please complete name, quantity and unit.",Toast.LENGTH_SHORT).show();return;}try{double d=Double.parseDouble(q);if(d<=0)throw new Exception();Ingredient x=new Ingredient(id,n,d,u,expiry.getText().toString().trim());if(id<0)db.insertIngredient(x);else db.updateIngredient(x);finish();}catch(Exception e){Toast.makeText(this,"Quantity must be a positive number.",Toast.LENGTH_SHORT).show();}}}
+
+===== C:\Users\user\Downloads\MMPantry_AndroidProject\MMPantry\app\src\main\java\com\mmpantry\app\DatabaseHelper.java =====
+package com.mmpantry.app;
+import android.content.*; import android.database.sqlite.*; import android.database.*; import java.util.*;
+public class DatabaseHelper extends SQLiteOpenHelper {
+ public DatabaseHelper(Context c){super(c,"mmpantry.db",null,1);}
+ public void onCreate(SQLiteDatabase db){db.execSQL("CREATE TABLE pantry_items(id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT,normalized TEXT,quantity REAL,unit TEXT,expiry TEXT)"); db.execSQL("CREATE TABLE recipes(id INTEGER PRIMARY KEY,name TEXT,description TEXT,prep INTEGER,method TEXT)"); db.execSQL("CREATE TABLE recipe_ingredients(id INTEGER PRIMARY KEY AUTOINCREMENT,recipe_id INTEGER,name TEXT,normalized TEXT,quantity REAL,unit TEXT)"); seed(db);}
+ public void onUpgrade(SQLiteDatabase db,int o,int n){}
+ public static String norm(String s){s=s.toLowerCase(Locale.US).trim(); if(s.endsWith("ies"))s=s.substring(0,s.length()-3)+"y"; else if(s.endsWith("es"))s=s.substring(0,s.length()-2); else if(s.endsWith("s"))s=s.substring(0,s.length()-1); return s;}
+ public long insertIngredient(Ingredient x){ContentValues v=new ContentValues();v.put("name",x.name);v.put("normalized",norm(x.name));v.put("quantity",x.quantity);v.put("unit",x.unit);v.put("expiry",x.expiry);return getWritableDatabase().insert("pantry_items",null,v);}
+ public List<Ingredient> getIngredients(){List<Ingredient> a=new ArrayList<>();Cursor c=getReadableDatabase().query("pantry_items",null,null,null,null,null,"name COLLATE NOCASE");while(c.moveToNext())a.add(new Ingredient(c.getInt(c.getColumnIndexOrThrow("id")),c.getString(c.getColumnIndexOrThrow("name")),c.getDouble(c.getColumnIndexOrThrow("quantity")),c.getString(c.getColumnIndexOrThrow("unit")),c.getString(c.getColumnIndexOrThrow("expiry"))));c.close();return a;}
+ public Ingredient getIngredient(int id){for(Ingredient x:getIngredients())if(x.id==id)return x;return null;}
+ public void updateIngredient(Ingredient x){ContentValues v=new ContentValues();v.put("name",x.name);v.put("normalized",norm(x.name));v.put("quantity",x.quantity);v.put("unit",x.unit);v.put("expiry",x.expiry);getWritableDatabase().update("pantry_items",v,"id=?",new String[]{""+x.id});}
+ public void deleteIngredient(int id){getWritableDatabase().delete("pantry_items","id=?",new String[]{""+id});}
+ public List<Recipe> getMatchingRecipes(){List<Recipe> out=new ArrayList<>();Map<String,Ingredient> p=new HashMap<>();for(Ingredient x:getIngredients())p.put(norm(x.name),x);Cursor r=getReadableDatabase().query("recipes",null,null,null,null,null,"name");while(r.moveToNext()){Recipe q=new Recipe(r.getInt(0),r.getString(1),r.getString(2),r.getInt(3),r.getString(4));Cursor i=getReadableDatabase().query("recipe_ingredients",null,"recipe_id=?",new String[]{""+q.id},null,null,null);boolean ok=true;while(i.moveToNext()){String n=i.getString(i.getColumnIndexOrThrow("normalized"));double need=i.getDouble(i.getColumnIndexOrThrow("quantity"));Ingredient have=p.get(n);if(have==null||have.quantity<need){ok=false;break;}q.ingredients.add(new Recipe.Req(i.getString(i.getColumnIndexOrThrow("name")),need,i.getString(i.getColumnIndexOrThrow("unit"))));}i.close();if(ok)out.add(q);}r.close();return out;}
+ public Recipe getRecipe(int id){for(Recipe x:getMatchingRecipes())if(x.id==id)return x;Cursor c=getReadableDatabase().query("recipes",null,"id=?",new String[]{""+id},null,null,null);if(!c.moveToFirst()){c.close();return null;}Recipe q=new Recipe(c.getInt(0),c.getString(1),c.getString(2),c.getInt(3),c.getString(4));c.close();Cursor i=getReadableDatabase().query("recipe_ingredients",null,"recipe_id=?",new String[]{""+id},null,null,null);while(i.moveToNext())q.ingredients.add(new Recipe.Req(i.getString(2),i.getDouble(4),i.getString(5)));i.close();return q;}
+ private void seed(SQLiteDatabase db){String[][] data={{"Caprese Salad","Tomato, mozzarella and basil in a sunlit classic.","10","Slice and layer the tomato and mozzarella. Add basil, olive oil and seasoning.","tomato|2|pieces;mozzarella|1|piece;basil|10|leaves;olive oil|1|tablespoon"},{"Pasta Aglio e Olio","Simple pasta with garlic, olive oil and chilli.","20","Cook pasta. Warm garlic and chilli in olive oil, then toss with pasta.","pasta|200|grams;garlic|2|cloves;olive oil|2|tablespoons;chilli|1|piece"},{"Gazpacho","A chilled Spanish tomato soup for warm afternoons.","25","Blend vegetables with olive oil and vinegar. Chill before serving.","tomato|4|pieces;cucumber|1|piece;pepper|1|piece;olive oil|2|tablespoons"},{"Pan con Tomate","Toasted bread rubbed with ripe tomato and garlic.","10","Toast bread, rub with garlic, add crushed tomato and olive oil.","bread|2|slices;tomato|2|pieces;garlic|1|clove;olive oil|1|tablespoon"},{"Tortilla Espanola","A Spanish potato and egg omelette.","35","Cook potato and onion gently. Combine with eggs and cook until set.","potato|3|pieces;egg|4|pieces;onion|1|piece;olive oil|2|tablespoons"},{"Panzanella","Tuscan bread salad with tomato and basil.","15","Combine toasted bread, tomato, cucumber and basil. Dress and rest.","bread|2|slices;tomato|2|pieces;cucumber|1|piece;basil|8|leaves"},{"Bruschetta","Crisp bread with tomato, basil and olive oil.","15","Toast bread and top with chopped tomato, basil and olive oil.","bread|2|slices;tomato|2|pieces;basil|6|leaves;olive oil|1|tablespoon"},{"Greek Salad","Fresh cucumber, tomato, olive and feta salad.","15","Chop ingredients and toss gently with olive oil.","tomato|2|pieces;cucumber|1|piece;feta|100|grams;olive|10|pieces"},{"Hummus Plate","Creamy chickpea hummus with lemon and garlic.","15","Blend chickpeas, lemon, garlic and olive oil until smooth.","chickpea|1|can;lemon|1|piece;garlic|1|clove;olive oil|1|tablespoon"},{"Ratatouille","A colourful ProvenÃ§al vegetable stew.","45","Dice vegetables and simmer slowly with olive oil and herbs.","tomato|2|pieces;eggplant|1|piece;zucchini|1|piece;onion|1|piece"},{"Lemon Couscous","Bright couscous with lemon and herbs.","15","Pour boiling water over couscous, rest, then fold through lemon and herbs.","couscous|150|grams;lemon|1|piece;parsley|10|grams;olive oil|1|tablespoon"},{"Mediterranean Rice Bowl","Rice with roasted vegetables and herbs.","35","Cook rice and serve with roasted vegetables and olive oil.","rice|200|grams;pepper|1|piece;zucchini|1|piece;olive oil|1|tablespoon"},{"Spanish Chickpea Stew","Comforting chickpeas with tomato and paprika.","40","Simmer chickpeas, tomato, onion and paprika until rich.","chickpea|1|can;tomato|2|pieces;onion|1|piece;paprika|1|teaspoon"},{"Garlic Butter Pasta","Silky pasta with garlic and butter.","20","Cook pasta, melt butter with garlic, and toss together.","pasta|200|grams;garlic|2|cloves;butter|2|tablespoons"},{"Tomato Basil Pasta","A quick Italian pasta with fresh tomato.","25","Cook pasta and fold through tomato, basil and olive oil.","pasta|200|grams;tomato|3|pieces;basil|10|leaves;olive oil|1|tablespoon"}};for(int k=0;k<data.length;k++){ContentValues v=new ContentValues();v.put("id",k+1);v.put("name",data[k][0]);v.put("description",data[k][1]);v.put("prep",Integer.parseInt(data[k][2]));v.put("method",data[k][3]);db.insert("recipes",null,v);for(String part:data[k][4].split(";")){String[] z=part.split("\\|");ContentValues x=new ContentValues();x.put("recipe_id",k+1);x.put("name",z[0]);x.put("normalized",norm(z[0]));x.put("quantity",Double.parseDouble(z[1]));x.put("unit",z[2]);db.insert("recipe_ingredients",null,x);}}}
+}
+
+===== C:\Users\user\Downloads\MMPantry_AndroidProject\MMPantry\app\src\main\java\com\mmpantry\app\Ingredient.java =====
+package com.mmpantry.app;
+public class Ingredient { public int id; public String name, unit, expiry; public double quantity;
+ public Ingredient(int id,String name,double quantity,String unit,String expiry){this.id=id;this.name=name;this.quantity=quantity;this.unit=unit;this.expiry=expiry;}
+}
+
+===== C:\Users\user\Downloads\MMPantry_AndroidProject\MMPantry\app\src\main\java\com\mmpantry\app\MainActivity.java =====
+package com.mmpantry.app;
+import android.app.*;import android.os.*;import android.content.*;import android.view.*;import android.widget.*;import androidx.appcompat.app.AppCompatDelegate;
+public class MainActivity extends Activity{LinearLayout box;public void onCreate(Bundle b){super.onCreate(b);boolean dark=getSharedPreferences("mm_settings",0).getBoolean("dark",false);AppCompatDelegate.setDefaultNightMode(dark?AppCompatDelegate.MODE_NIGHT_YES:AppCompatDelegate.MODE_NIGHT_NO);render();}void render(){box=new LinearLayout(this);box.setOrientation(LinearLayout.VERTICAL);box.setPadding(36,58,36,28);box.setBackgroundColor(Ui.background(this));TextView title=Ui.text(this,"MM Pantry",34);box.addView(title);TextView line=Ui.text(this,"Made with love from your pantry.",18);line.setTextColor(Ui.secondary(this));box.addView(line);TextView intro=Ui.text(this,"A little Spanish sun, Italian ease, and less food waste.",15);intro.setTextColor(Ui.secondary(this));box.addView(intro);add("YOUR PANTRY",PantryActivity.class);add("SUGGESTED RECIPES",RecipesActivity.class);add("SETTINGS",SettingsActivity.class);setContentView(box);}void add(String s,final Class<?> c){Button x=new Button(this);x.setText(s);x.setTextColor(android.graphics.Color.WHITE);x.setBackgroundColor(Ui.GOLD);x.setOnClickListener(v->startActivity(new Intent(this,c)));LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,ViewGroup.LayoutParams.WRAP_CONTENT);p.setMargins(0,24,0,0);box.addView(x,p);}}
+
+===== C:\Users\user\Downloads\MMPantry_AndroidProject\MMPantry\app\src\main\java\com\mmpantry\app\PantryActivity.java =====
+package com.mmpantry.app;
+
+import android.app.*;import android.os.*;import android.content.*;import android.view.*;import android.widget.*;import androidx.recyclerview.widget.*;import java.util.*;
+public class PantryActivity extends Activity{
+ DatabaseHelper db; RecyclerView list; TextView empty;
+ public void onCreate(Bundle b){super.onCreate(b);db=new DatabaseHelper(this);render();}
+ protected void onResume(){super.onResume();if(db!=null)load();}
+ void render(){LinearLayout root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);root.setPadding(28,28,28,18);root.setBackgroundColor(Ui.background(this));
+  TextView title=Ui.text(this,"Your Pantry",30);root.addView(title);TextView sub=Ui.text(this,"What is already at home?",16);sub.setTextColor(Ui.secondary(this));root.addView(sub);
+  Button add=new Button(this);add.setText("+  ADD INGREDIENT");add.setTextColor(android.graphics.Color.WHITE);add.setBackgroundColor(Ui.GOLD);add.setOnClickListener(v->startActivity(new Intent(this,AddEditIngredientActivity.class)));root.addView(add);
+  empty=Ui.text(this,"Your pantry is ready for its first ingredient.",17);empty.setTextColor(Ui.secondary(this));root.addView(empty);
+  list=new RecyclerView(this);list.setLayoutManager(new LinearLayoutManager(this));root.addView(list,new LinearLayout.LayoutParams(-1,0,1));setContentView(root);load();}
+ void load(){List<Ingredient> data=db.getIngredients();if(empty!=null)empty.setVisibility(data.isEmpty()?View.VISIBLE:View.GONE);if(list!=null)list.setAdapter(new PantryAdapter(data,new PantryAdapter.Listener(){public void edit(Ingredient x){Intent i=new Intent(PantryActivity.this,AddEditIngredientActivity.class);i.putExtra("id",x.id);startActivity(i);}public void delete(Ingredient x){new AlertDialog.Builder(PantryActivity.this).setTitle("Remove ingredient?").setMessage(x.name+" will be removed from your pantry.").setNegativeButton("CANCEL",null).setPositiveButton("REMOVE",(d,w)->{db.deleteIngredient(x.id);load();}).show();}}));}
+}
+
+===== C:\Users\user\Downloads\MMPantry_AndroidProject\MMPantry\app\src\main\java\com\mmpantry\app\PantryAdapter.java =====
+package com.mmpantry.app;
+
+import android.graphics.Color;
+import android.view.*;
+import android.widget.*;
+import androidx.recyclerview.widget.RecyclerView;
+import java.util.*;
+
+public class PantryAdapter extends RecyclerView.Adapter<PantryAdapter.Holder> {
+    public interface Listener { void edit(Ingredient x); void delete(Ingredient x); }
+    private final List<Ingredient> items; private final Listener listener;
+    public PantryAdapter(List<Ingredient> items, Listener listener){this.items=items;this.listener=listener;}
+    public Holder onCreateViewHolder(ViewGroup p,int type){LinearLayout row=new LinearLayout(p.getContext());row.setOrientation(LinearLayout.HORIZONTAL);row.setPadding(20,16,12,16);row.setBackgroundColor(Ui.card(p.getContext()));TextView label=Ui.text(p.getContext(),"",16);row.addView(label,new LinearLayout.LayoutParams(0,-2,1));Button edit=new Button(p.getContext());edit.setText("EDIT");row.addView(edit);Button del=new Button(p.getContext());del.setText("DELETE");row.addView(del);return new Holder(row,label,edit,del);}
+    public void onBindViewHolder(Holder h,int pos){Ingredient x=items.get(pos);h.label.setText(x.name+"\n"+x.quantity+" "+x.unit+(x.expiry.isEmpty()?"":"   â€¢ expires "+x.expiry));h.edit.setOnClickListener(v->listener.edit(x));h.del.setOnClickListener(v->listener.delete(x));}
+    public int getItemCount(){return items.size();}
+    static class Holder extends RecyclerView.ViewHolder{TextView label;Button edit,del;Holder(View v,TextView l,Button e,Button d){super(v);label=l;edit=e;del=d;}}
+}
+
+===== C:\Users\user\Downloads\MMPantry_AndroidProject\MMPantry\app\src\main\java\com\mmpantry\app\Recipe.java =====
+package com.mmpantry.app;
+import java.util.*;
+public class Recipe { public int id; public String name, description, method; public int prepTime; public List<Req> ingredients=new ArrayList<>();
+ public Recipe(int id,String name,String description,int prepTime,String method){this.id=id;this.name=name;this.description=description;this.prepTime=prepTime;this.method=method;}
+ public static class Req { public String name,unit; public double qty; public Req(String n,double q,String u){name=n;qty=q;unit=u;} }
+}
+
+===== C:\Users\user\Downloads\MMPantry_AndroidProject\MMPantry\app\src\main\java\com\mmpantry\app\RecipeAdapter.java =====
+package com.mmpantry.app;
+
+import android.view.*;import android.widget.*;import androidx.recyclerview.widget.RecyclerView;import java.util.*;
+public class RecipeAdapter extends RecyclerView.Adapter<RecipeAdapter.Holder>{
+ public interface Listener{void open(Recipe r);} private final List<Recipe> items;private final Listener listener;
+ public RecipeAdapter(List<Recipe> items,Listener listener){this.items=items;this.listener=listener;}
+ public Holder onCreateViewHolder(ViewGroup p,int type){Button b=new Button(p.getContext());b.setAllCaps(false);b.setTextSize(16);b.setPadding(20,18,20,18);return new Holder(b);}
+ public void onBindViewHolder(Holder h,int pos){Recipe r=items.get(pos);h.button.setText(r.name+"\n"+r.description+"\n"+r.ingredients.size()+"/"+r.ingredients.size()+" pantry ingredients  â€¢  "+r.prepTime+" min");h.button.setOnClickListener(v->listener.open(r));}
+ public int getItemCount(){return items.size();}static class Holder extends RecyclerView.ViewHolder{Button button;Holder(Button b){super(b);button=b;}}
+}
+
+===== C:\Users\user\Downloads\MMPantry_AndroidProject\MMPantry\app\src\main\java\com\mmpantry\app\RecipeDetailActivity.java =====
+package com.mmpantry.app;
+import android.app.*;import android.os.*;import android.widget.*;
+public class RecipeDetailActivity extends Activity{public void onCreate(Bundle b){super.onCreate(b);DatabaseHelper db=new DatabaseHelper(this);Recipe r=db.getRecipe(getIntent().getIntExtra("id",-1));LinearLayout l=new LinearLayout(this);l.setOrientation(LinearLayout.VERTICAL);l.setPadding(30,30,30,20);l.setBackgroundColor(Ui.background(this));TextView h=Ui.text(this,r==null?"Recipe unavailable":r.name,30);l.addView(h);if(r!=null){TextView d=Ui.text(this,r.description+"\n\nIngredients",17);l.addView(d);for(Recipe.Req x:r.ingredients){TextView t=Ui.text(this,"â€¢ "+x.name+" â€” "+x.qty+" "+x.unit,16);l.addView(t);}TextView m=Ui.text(this,"\nMethod\n"+r.method,17);l.addView(m);}setContentView(l);}}
+
+===== C:\Users\user\Downloads\MMPantry_AndroidProject\MMPantry\app\src\main\java\com\mmpantry\app\RecipesActivity.java =====
+package com.mmpantry.app;
+
+import android.app.*;import android.os.*;import android.content.*;import android.view.*;import android.widget.*;import androidx.recyclerview.widget.*;import java.util.*;
+public class RecipesActivity extends Activity{
+ DatabaseHelper db;RecyclerView list;TextView empty;
+ public void onCreate(Bundle b){super.onCreate(b);db=new DatabaseHelper(this);render();}
+ protected void onResume(){super.onResume();if(db!=null)load();}
+ void render(){LinearLayout root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);root.setPadding(28,28,28,18);root.setBackgroundColor(Ui.background(this));TextView h=Ui.text(this,"Suggested Recipes",30);root.addView(h);TextView sub=Ui.text(this,"Made with what you have. Strict matches only.",16);sub.setTextColor(Ui.secondary(this));root.addView(sub);empty=Ui.text(this,"No recipes match your pantry yet â€” add more ingredients.",17);empty.setTextColor(Ui.secondary(this));root.addView(empty);list=new RecyclerView(this);list.setLayoutManager(new LinearLayoutManager(this));root.addView(list,new LinearLayout.LayoutParams(-1,0,1));setContentView(root);load();}
+ void load(){List<Recipe> data=db.getMatchingRecipes();empty.setVisibility(data.isEmpty()?View.VISIBLE:View.GONE);list.setAdapter(new RecipeAdapter(data,r->{Intent i=new Intent(this,RecipeDetailActivity.class);i.putExtra("id",r.id);startActivity(i);}));}
+}
+
+===== C:\Users\user\Downloads\MMPantry_AndroidProject\MMPantry\app\src\main\java\com\mmpantry\app\SettingsActivity.java =====
+package com.mmpantry.app;
+import android.app.*;import android.os.*;import android.content.*;import android.view.*;import android.widget.*;import androidx.appcompat.app.AppCompatDelegate;
+public class SettingsActivity extends Activity{public void onCreate(Bundle b){super.onCreate(b);LinearLayout l=new LinearLayout(this);l.setOrientation(LinearLayout.VERTICAL);l.setPadding(30,30,30,20);l.setBackgroundColor(Ui.background(this));TextView h=Ui.text(this,"Settings",30);l.addView(h);TextView a=Ui.text(this,"Appearance",18);l.addView(a);Switch s=new Switch(this);s.setText("Dark mode");s.setTextColor(Ui.primary(this));s.setChecked(getSharedPreferences("mm_settings",0).getBoolean("dark",false));s.setOnCheckedChangeListener((v,on)->{getSharedPreferences("mm_settings",0).edit().putBoolean("dark",on).apply();AppCompatDelegate.setDefaultNightMode(on?AppCompatDelegate.MODE_NIGHT_YES:AppCompatDelegate.MODE_NIGHT_NO);});l.addView(s);TextView f=Ui.text(this,"\nMM Pantry\nMade with love from your pantry.\n\nYour pantry, your recipes, less waste.",16);f.setTextColor(Ui.secondary(this));l.addView(f);setContentView(l);}}
+
+===== C:\Users\user\Downloads\MMPantry_AndroidProject\MMPantry\app\src\main\java\com\mmpantry\app\Ui.java =====
+package com.mmpantry.app;
+
+import android.content.Context;
+import android.graphics.Color;
+import android.view.View;
+import android.widget.TextView;
+import androidx.appcompat.app.AppCompatDelegate;
+
+public final class Ui {
+    public static final int GOLD = Color.rgb(184,148,85);
+    public static boolean dark(Context c) { return AppCompatDelegate.getDefaultNightMode() == AppCompatDelegate.MODE_NIGHT_YES; }
+    public static int background(Context c) { return dark(c) ? Color.rgb(23,23,23) : Color.rgb(245,240,232); }
+    public static int card(Context c) { return dark(c) ? Color.rgb(36,36,36) : Color.rgb(255,253,248); }
+    public static int primary(Context c) { return dark(c) ? Color.rgb(245,240,232) : Color.rgb(32,32,32); }
+    public static int secondary(Context c) { return dark(c) ? Color.rgb(180,173,164) : Color.rgb(116,110,102); }
+    public static TextView text(Context c, String value, float size) { TextView t=new TextView(c); t.setText(value); t.setTextSize(size); t.setTextColor(primary(c)); t.setPadding(0,8,0,8); return t; }
+    private Ui() {}
+}
+

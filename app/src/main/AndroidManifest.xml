@@ -1,0 +1,14 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application android:theme="@style/Theme.MMPantry" android:label="MM Pantry" android:allowBackup="true" android:supportsRtl="true">
+        <activity android:name=".SettingsActivity" />
+        <activity android:name=".RecipeDetailActivity" />
+        <activity android:name=".RecipesActivity" />
+        <activity android:name=".AddEditIngredientActivity" />
+        <activity android:name=".PantryActivity" />
+        <activity android:name=".MainActivity" android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>
