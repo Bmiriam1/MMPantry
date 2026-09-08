@@ -156,8 +156,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
  public List<Recipe> getMatchingRecipes() {
   List<Recipe> matches = new ArrayList<>();
 
-  // Build a lookup of what the user currently has, keyed by normalized ingredient name,
-  // so "tomato" and "tomatoes" resolve to the same pantry entry.
   Map<String, Ingredient> pantry = new HashMap<>();
   for (Ingredient x : getIngredients()) {
    pantry.put(norm(x.name), x);
@@ -188,8 +186,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
 
     Ingredient have = pantry.get(neededNormalized);
 
-    // Strict-matching rule: if the ingredient is missing entirely, OR the pantry
-    // doesn't have enough of it, this recipe is disqualified immediately.
     if (have == null || have.quantity < neededQuantity) {
      canMake = false;
      break;
@@ -208,6 +204,67 @@ public class DatabaseHelper extends SQLiteOpenHelper {
   }
   recipeCursor.close();
   return matches;
+ }
+
+ /**
+  * Bonus feature (Section 8): finds recipes that are missing exactly ONE ingredient
+  * (or don't have enough quantity of exactly one ingredient). These are NOT strict
+  * matches and must never appear in getMatchingRecipes() — this is a separate,
+  * clearly-labeled list so the user can see what they're one ingredient away from.
+  */
+ public List<Recipe> getAlmostThereRecipes() {
+  List<Recipe> almostThere = new ArrayList<>();
+
+  Map<String, Ingredient> pantry = new HashMap<>();
+  for (Ingredient x : getIngredients()) {
+   pantry.put(norm(x.name), x);
+  }
+
+  Cursor recipeCursor = getReadableDatabase().query(
+          "recipes", null, null, null, null, null, "name");
+
+  while (recipeCursor.moveToNext()) {
+   Recipe recipe = new Recipe(
+           recipeCursor.getInt(0),
+           recipeCursor.getString(1),
+           recipeCursor.getString(2),
+           recipeCursor.getInt(3),
+           recipeCursor.getString(4));
+
+   Cursor ingredientCursor = getReadableDatabase().query(
+           "recipe_ingredients", null, "recipe_id=?",
+           new String[]{"" + recipe.id}, null, null, null);
+
+   int missingCount = 0;
+   String missingName = null;
+
+   while (ingredientCursor.moveToNext()) {
+    String neededNormalized = ingredientCursor.getString(
+            ingredientCursor.getColumnIndexOrThrow("normalized"));
+    double neededQuantity = ingredientCursor.getDouble(
+            ingredientCursor.getColumnIndexOrThrow("quantity"));
+    String neededName = ingredientCursor.getString(
+            ingredientCursor.getColumnIndexOrThrow("name"));
+
+    Ingredient have = pantry.get(neededNormalized);
+
+    if (have == null || have.quantity < neededQuantity) {
+     missingCount++;
+     missingName = neededName;
+    }
+
+    recipe.ingredients.add(new Recipe.Req(neededName, neededQuantity,
+            ingredientCursor.getString(ingredientCursor.getColumnIndexOrThrow("unit"))));
+   }
+   ingredientCursor.close();
+
+   if (missingCount == 1) {
+    recipe.missingIngredient = missingName;
+    almostThere.add(recipe);
+   }
+  }
+  recipeCursor.close();
+  return almostThere;
  }
 
  /**
@@ -314,7 +371,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
    recipeValues.put("method", data[k][3]);
    db.insert("recipes", null, recipeValues);
 
-   // Each recipe's ingredient list is semicolon-separated "name|quantity|unit" entries.
    for (String part : data[k][4].split(";")) {
     String[] fields = part.split("\\|");
 
